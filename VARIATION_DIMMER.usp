@@ -64,14 +64,57 @@ INTEGER_PARAMETER   _SKIP_,
                     _SKIP_,
                     _SKIP_,
                     _SKIP_,
-                    RAMP_TIME,       // Durée du ramp en ms (0-65535)
+                    RAMP_TIME,       // Durée du ramp en ms (100-65535)
                     TEMPO,           // Délai appui long en ticks (1 tick = 10ms)
                     SCENE1,          // Niveau scène 1 (0-65535)
                     SCENE2,          // Niveau scène 2 (0-65535)
                     SCENE3,          // Niveau scène 3 (0-65535)
                     SCENE4,          // Niveau scène 4 (0-65535)
-                    NIVEAU_MINIMUM,  // Niveau minimum du ramp (0-65535)
-                    NIVEAU_MAXIMUM;  // Niveau maximum du ramp (0-65535)
+                    NIVEAU_MINIMUM,  // Niveau minimum du ramp (0-65534)
+                    NIVEAU_MAXIMUM;  // Niveau maximum du ramp (1-65535)
+
+/*******************************************************************************************
+  Parameter Properties
+*******************************************************************************************/
+#BEGIN_PARAMETER_PROPERTIES RAMP_TIME
+    propValidUnits = unitDecimal;
+    propDefaultUnit = unitDecimal;
+    propBounds = 100, 65535;
+    propDefaultValue = 3000;
+    propShortDescription = "Durée du ramp (ms)";
+#END_PARAMETER_PROPERTIES
+
+#BEGIN_PARAMETER_PROPERTIES TEMPO
+    propValidUnits = unitDecimal;
+    propDefaultUnit = unitDecimal;
+    propBounds = 1, 65535;
+    propDefaultValue = 50;
+    propShortDescription = "Délai appui long (x10ms, ex: 50=500ms)";
+#END_PARAMETER_PROPERTIES
+
+#BEGIN_PARAMETER_PROPERTIES SCENE1, SCENE2, SCENE3, SCENE4
+    propValidUnits = unitDecimal;
+    propDefaultUnit = unitDecimal;
+    propBounds = 0, 65535;
+    propDefaultValue = 32767;
+    propShortDescription = "Niveau de scène (0-65535)";
+#END_PARAMETER_PROPERTIES
+
+#BEGIN_PARAMETER_PROPERTIES NIVEAU_MINIMUM
+    propValidUnits = unitDecimal;
+    propDefaultUnit = unitDecimal;
+    propBounds = 0, 65534;
+    propDefaultValue = 0;
+    propShortDescription = "Niveau minimum du ramp (0-65535, < NIVEAU_MAXIMUM)";
+#END_PARAMETER_PROPERTIES
+
+#BEGIN_PARAMETER_PROPERTIES NIVEAU_MAXIMUM
+    propValidUnits = unitDecimal;
+    propDefaultUnit = unitDecimal;
+    propBounds = 1, 65535;
+    propDefaultValue = 65535;
+    propShortDescription = "Niveau maximum du ramp (0-65535, > NIVEAU_MINIMUM)";
+#END_PARAMETER_PROPERTIES
 
 /*******************************************************************************************
   Global Variables
@@ -98,40 +141,47 @@ Function UpdateOnOffFB(INTEGER niveau) {
     }
 }
 
-// Lance un ramp dans la direction SENS_DE_VARIATION et bascule la direction pour le prochain appui
-Function StartDimRamp() {
-    IF (SENS_DE_VARIATION = 0) {
-        SENS_DE_VARIATION = 1;
+// Lance le ramp vers une direction donnée (1 = monte vers MAX, 0 = descend vers MIN)
+// Met à jour les feedbacks VAR_PLUS_FB / VAR_MOINS_FB et ON_OFF_FB
+Function StartRampInDirection(INTEGER direction) {
+    IF (direction = 1) {
         LightInfo.rampTargetValue = NIVEAU_MAXIMUM;
-        LightInfo.rampTransitionTime = RAMP_TIME;
-        status = CreateRamp(VAR, LightInfo);
-        IF (status <> 0) {
-            TRACE("CreateRamp error: %d\n", status);
-        }
         VAR_PLUS_FB = 1;
+        VAR_MOINS_FB = 0;
     } ELSE {
-        SENS_DE_VARIATION = 0;
         LightInfo.rampTargetValue = NIVEAU_MINIMUM;
-        LightInfo.rampTransitionTime = RAMP_TIME;
-        status = CreateRamp(VAR, LightInfo);
-        IF (status <> 0) {
-            TRACE("CreateRamp error: %d\n", status);
-        }
         VAR_MOINS_FB = 1;
+        VAR_PLUS_FB = 0;
+    }
+    LightInfo.rampTransitionTime = RAMP_TIME;
+    status = CreateRamp(VAR, LightInfo);
+    IF (status <> 0) {
+        TRACE("CreateRamp error: %d\n", status);
     }
     ON_OFF_FB = 1;
     OFF_FB = 0;
+}
+
+// Lance un ramp en alternant la direction à chaque appui (toggle)
+Function StartDimRamp() {
+    IF (SENS_DE_VARIATION = 0) {
+        SENS_DE_VARIATION = 1;
+        StartRampInDirection(1);
+    } ELSE {
+        SENS_DE_VARIATION = 0;
+        StartRampInDirection(0);
+    }
     A_SUBI_UNE_VARIATION = 1;
 }
 
-// Arrête le ramp, sauvegarde le niveau courant et met à jour le feedback
+// Arrête le ramp, sauvegarde le niveau réel (VAR_FB) et met à jour le feedback
 Function StopDimRamp() {
     A_SUBI_UNE_VARIATION = 0;
     StopRamp(VAR);
     VAR_PLUS_FB = 0;
     VAR_MOINS_FB = 0;
-    LAST_VAR = VAR;
-    UpdateOnOffFB(VAR); // Feedback basé sur le niveau réel après arrêt
+    LAST_VAR = VAR_FB;        // VAR_FB = niveau réel confirmé par l'équipement
+    UpdateOnOffFB(VAR_FB);
 }
 
 // Rappelle une scène (appui court) : sauvegarde l'ancien niveau et applique le niveau de scène
@@ -146,6 +196,7 @@ Function RecallScene(INTEGER sceneValue) {
   Event Handlers
 *******************************************************************************************/
 
+// Source de vérité pour les feedbacks — corrige tout décalage avec l'équipement réel
 CHANGE VAR_FB {
     UpdateOnOffFB(VAR_FB);
 }
@@ -157,14 +208,12 @@ PUSH ON_OFF {
         }
         VAR = LAST_VAR;
         PULSE(20, PULSE_ON);
-        ON_OFF_FB = 1;
-        OFF_FB = 0;
+        UpdateOnOffFB(LAST_VAR);
     } ELSE {
         LAST_VAR = VAR_FB;
         VAR = 0;
         PULSE(20, PULSE_OFF);
-        ON_OFF_FB = 0;
-        OFF_FB = 1;
+        UpdateOnOffFB(0);
     }
 }
 
@@ -185,14 +234,12 @@ RELEASE VAR_CLK {
             }
             VAR = LAST_VAR;
             PULSE(20, PULSE_ON);
-            ON_OFF_FB = 1;
-            OFF_FB = 0;
+            UpdateOnOffFB(LAST_VAR);
         } ELSE {
             LAST_VAR = VAR_FB;
             VAR = 0;
             PULSE(20, PULSE_OFF);
-            ON_OFF_FB = 0;
-            OFF_FB = 1;
+            UpdateOnOffFB(0);
         }
         CancelAllWait();
     }
@@ -206,41 +253,27 @@ RELEASE VAR_PLUS_MOINS {
     StopRamp(VAR);
     VAR_PLUS_FB = 0;
     VAR_MOINS_FB = 0;
-    LAST_VAR = VAR;
+    LAST_VAR = VAR_FB;
 }
 
 PUSH VAR_PLUS {
     SENS_DE_VARIATION = 1;
-    LightInfo.rampTargetValue = NIVEAU_MAXIMUM;
-    LightInfo.rampTransitionTime = RAMP_TIME;
-    status = CreateRamp(VAR, LightInfo);
-    IF (status <> 0) {
-        TRACE("CreateRamp error: %d\n", status);
-    }
-    ON_OFF_FB = 1;
-    OFF_FB = 0;
+    StartRampInDirection(1);
 }
 
 RELEASE VAR_PLUS {
     StopRamp(VAR);
-    LAST_VAR = VAR;
+    LAST_VAR = VAR_FB;
 }
 
 PUSH VAR_MOINS {
     SENS_DE_VARIATION = 0;
-    LightInfo.rampTargetValue = NIVEAU_MINIMUM;
-    LightInfo.rampTransitionTime = RAMP_TIME;
-    status = CreateRamp(VAR, LightInfo);
-    IF (status <> 0) {
-        TRACE("CreateRamp error: %d\n", status);
-    }
-    ON_OFF_FB = 1;
-    OFF_FB = 0;
+    StartRampInDirection(0);
 }
 
 RELEASE VAR_MOINS {
     StopRamp(VAR);
-    LAST_VAR = VAR;
+    LAST_VAR = VAR_FB;
 }
 
 PUSH PRESS_ON {
@@ -249,8 +282,7 @@ PUSH PRESS_ON {
     }
     VAR = LAST_VAR;
     PULSE(20, PULSE_ON);
-    ON_OFF_FB = 1;
-    OFF_FB = 0;
+    UpdateOnOffFB(LAST_VAR);
 }
 
 PUSH PRESS_OFF {
@@ -260,8 +292,7 @@ PUSH PRESS_OFF {
     }
     VAR = 0;
     PULSE(20, PULSE_OFF);
-    ON_OFF_FB = 0;
-    OFF_FB = 1;
+    UpdateOnOffFB(0);
 }
 
 PUSH MEMORISE {
