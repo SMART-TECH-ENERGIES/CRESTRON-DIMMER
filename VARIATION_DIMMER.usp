@@ -79,40 +79,40 @@ INTEGER_PARAMETER   _SKIP_,
 #BEGIN_PARAMETER_PROPERTIES RAMP_TIME
     propValidUnits = unitDecimal;
     propDefaultUnit = unitDecimal;
-    propBounds = 100, 65535;
-    propDefaultValue = 3000;
+    propBounds = 100d, 65535d;
+    propDefaultValue = 3000d;
     propShortDescription = "Durée du ramp (ms)";
 #END_PARAMETER_PROPERTIES
 
 #BEGIN_PARAMETER_PROPERTIES TEMPO
     propValidUnits = unitDecimal;
     propDefaultUnit = unitDecimal;
-    propBounds = 1, 65535;
-    propDefaultValue = 50;
+    propBounds = 1d, 65535d;
+    propDefaultValue = 50d;
     propShortDescription = "Délai appui long (x10ms, ex: 50=500ms)";
 #END_PARAMETER_PROPERTIES
 
 #BEGIN_PARAMETER_PROPERTIES SCENE1, SCENE2, SCENE3, SCENE4
     propValidUnits = unitDecimal;
     propDefaultUnit = unitDecimal;
-    propBounds = 0, 65535;
-    propDefaultValue = 32767;
+    propBounds = 0d, 65535d;
+    propDefaultValue = 32767d;
     propShortDescription = "Niveau de scène (0-65535)";
 #END_PARAMETER_PROPERTIES
 
 #BEGIN_PARAMETER_PROPERTIES NIVEAU_MINIMUM
     propValidUnits = unitDecimal;
     propDefaultUnit = unitDecimal;
-    propBounds = 0, 65534;
-    propDefaultValue = 0;
+    propBounds = 0d, 65534d;
+    propDefaultValue = 0d;
     propShortDescription = "Niveau minimum du ramp (0-65535, < NIVEAU_MAXIMUM)";
 #END_PARAMETER_PROPERTIES
 
 #BEGIN_PARAMETER_PROPERTIES NIVEAU_MAXIMUM
     propValidUnits = unitDecimal;
     propDefaultUnit = unitDecimal;
-    propBounds = 1, 65535;
-    propDefaultValue = 65535;
+    propBounds = 1d, 65535d;
+    propDefaultValue = 65535d;
     propShortDescription = "Niveau maximum du ramp (0-65535, > NIVEAU_MINIMUM)";
 #END_PARAMETER_PROPERTIES
 
